@@ -180,12 +180,9 @@
     console.log('Showroom Execute: Running command:', command)
 
     // Try to find the terminal iframe
-    // Supports both old showroom (/terminal) and new showroom (/wetty) panel layouts
     let terminalFrame = null
 
     if (window.parent !== window) {
-      // We're in an iframe (the content iframe)
-      // Try to find sibling terminal iframe in the parent showroom framework
       try {
         const parentDoc = window.parent.document
         terminalFrame = parentDoc.querySelector('iframe[src*="/wetty"]') ||
@@ -194,7 +191,6 @@
                        parentDoc.querySelector('.app-split-right__content.active iframe') ||
                        parentDoc.querySelector('iframe#terminal_01')
 
-        // If not found in active tab, search all tab iframes
         if (!terminalFrame) {
           const allIframes = parentDoc.querySelectorAll('.app-split-right__content iframe')
           for (let i = 0; i < allIframes.length; i++) {
@@ -213,62 +209,101 @@
     if (terminalFrame && terminalFrame.contentWindow) {
       console.log('Showroom Execute: Terminal iframe found:', terminalFrame.src)
 
-      // Method 1: Try wetty's socket directly
+      let sent = false
+
       try {
         const wettyWindow = terminalFrame.contentWindow
-        // Wetty exposes the terminal via the global socket or term object
-        const term = wettyWindow.term || wettyWindow.wetty_term
+        const wettyDoc = terminalFrame.contentDocument || wettyWindow.document
 
-        if (term) {
-          console.log('Showroom Execute: Terminal object found')
+        // Method 1: Find xterm textarea and simulate keyboard input
+        // Wetty's xterm creates a hidden textarea for input
+        const xtermTextarea = wettyDoc.querySelector('.xterm-helper-textarea') ||
+                             wettyDoc.querySelector('textarea.xterm-helper-textarea')
 
-          if (typeof term.sendText === 'function') {
-            console.log('Showroom Execute: Using term.sendText()')
-            term.sendText(command + '\n', true)
-          } else if (typeof term.paste === 'function') {
-            console.log('Showroom Execute: Using term.paste() + simulated Enter')
-            term.paste(command)
-            setTimeout(function () {
-              if (typeof term.write === 'function') {
-                term.write('\r')
-              }
-              if (term._core && term._core.coreService && term._core.coreService.triggerDataEvent) {
-                term._core.coreService.triggerDataEvent('\r')
-              }
-            }, 10)
-          } else if (typeof term.write === 'function') {
-            console.log('Showroom Execute: Using term.write() with newline')
-            term.write(command + '\r')
+        if (xtermTextarea) {
+          console.log('Showroom Execute: Found xterm textarea, simulating input')
+          xtermTextarea.focus()
+
+          // Use the xterm's core input handler via the textarea
+          // Insert text and dispatch input event
+          const inputEvent = new InputEvent('input', {
+            data: command + '\r',
+            inputType: 'insertText',
+            isComposing: false,
+            bubbles: true,
+          })
+
+          // Also try the data property approach
+          const dataTransfer = new DataTransfer()
+          dataTransfer.setData('text/plain', command)
+
+          const pasteEvent = new ClipboardEvent('paste', {
+            clipboardData: dataTransfer,
+            bubbles: true,
+            cancelable: true,
+          })
+
+          xtermTextarea.dispatchEvent(pasteEvent)
+
+          // After paste, send Enter key
+          setTimeout(function () {
+            const enterEvent = new KeyboardEvent('keydown', {
+              key: 'Enter',
+              code: 'Enter',
+              keyCode: 13,
+              which: 13,
+              bubbles: true,
+            })
+            xtermTextarea.dispatchEvent(enterEvent)
+          }, 50)
+
+          sent = true
+          console.log('Showroom Execute: Command sent via xterm textarea paste')
+        }
+
+        // Method 2: Try to access xterm terminal object directly
+        if (!sent) {
+          const term = wettyWindow.term || wettyWindow.wetty_term
+          if (term) {
+            console.log('Showroom Execute: Terminal object found')
+            if (typeof term.paste === 'function') {
+              term.paste(command + '\r')
+              sent = true
+            } else if (typeof term.write === 'function') {
+              term.write(command + '\r')
+              sent = true
+            }
           }
-          console.log('Showroom Execute: Command sent to terminal')
-        } else {
-          console.log('Showroom Execute: No term object, trying wetty socket input')
-          // Wetty uses a WebSocket - try to find and use it
-          const socket = wettyWindow.socket || wettyWindow.ws
-          if (socket && typeof socket.send === 'function') {
-            console.log('Showroom Execute: Using wetty socket.send()')
-            socket.send(command + '\r')
-          } else {
-            console.log('Showroom Execute: No socket found, using postMessage')
+        }
+
+        // Method 3: Find the WebSocket and send directly
+        if (!sent) {
+          // Walk through all variables to find the socket.io connection
+          const socket = wettyWindow.socket || wettyWindow.io
+          if (socket && typeof socket.emit === 'function') {
+            console.log('Showroom Execute: Using socket.emit("input")')
+            socket.emit('input', command + '\r')
+            sent = true
           }
         }
       } catch (e) {
         console.error('Showroom Execute: Error accessing terminal:', e)
       }
 
-      // Also try postMessage as fallback (works cross-origin)
-      try {
-        terminalFrame.contentWindow.postMessage({
-          type: 'execute',
-          command: command + '\n',
-        }, '*')
-        console.log('Showroom Execute: Command also sent via postMessage')
-      } catch (e) {
-        console.log('Showroom Execute: postMessage failed:', e)
+      // Method 4: postMessage fallback
+      if (!sent) {
+        try {
+          terminalFrame.contentWindow.postMessage({
+            type: 'execute',
+            command: command + '\n',
+          }, '*')
+          console.log('Showroom Execute: Command sent via postMessage')
+        } catch (e) {
+          console.log('Showroom Execute: postMessage failed:', e)
+        }
       }
     } else {
       console.error('Showroom Execute: Terminal iframe not found')
-      console.error('Showroom Execute: Searched for iframes with /wetty, /terminal, /tty paths')
       console.error('Terminal not found. Please ensure the terminal tab is loaded.')
     }
   }
