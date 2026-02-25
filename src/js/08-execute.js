@@ -151,20 +151,23 @@
   function switchToTerminalTab () {
     if (window.parent !== window) {
       try {
-        // The showroom React app listens for popstate events to detect URL changes
-        // Update the URL t= parameter and dispatch popstate to trigger React re-render
-        var parentUrl = new URL(window.parent.location.href)
-        var currentTab = parentUrl.searchParams.get('t')
+        var parentDoc = window.parent.document
 
-        if (currentTab === 'Terminal' || currentTab === 'Bastion') {
-          console.log('Showroom Execute: Already on Terminal tab')
-          return
+        // Find the PF6 tab button by its item-text content
+        var tabTexts = parentDoc.querySelectorAll('.pf-v6-c-tabs__item-text')
+        for (var i = 0; i < tabTexts.length; i++) {
+          var text = tabTexts[i].textContent.trim()
+          if (text === 'Terminal' || text === 'Bastion') {
+            // Click the parent link element, not the span
+            var tabLink = tabTexts[i].closest('.pf-v6-c-tabs__link') || tabTexts[i].parentElement
+            if (tabLink) {
+              console.log('Showroom Execute: Clicking Terminal tab button')
+              tabLink.click()
+              return
+            }
+          }
         }
-
-        parentUrl.searchParams.set('t', 'Terminal')
-        window.parent.history.pushState(null, '', parentUrl.toString())
-        window.parent.dispatchEvent(new window.parent.PopStateEvent('popstate'))
-        console.log('Showroom Execute: Switched to Terminal tab via popstate')
+        console.log('Showroom Execute: Terminal tab not found in PF6 tabs')
       } catch (e) {
         console.log('Showroom Execute: Cannot switch tab:', e)
       }
