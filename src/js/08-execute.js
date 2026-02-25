@@ -145,64 +145,83 @@
     console.log('Showroom Execute: Running command:', command)
 
     // Try to find the terminal iframe
-    // The terminal is in the parent window at /terminal
+    // Supports both old showroom (/terminal) and new showroom (/wetty) panel layouts
     let terminalFrame = null
 
     if (window.parent !== window) {
       // We're in an iframe (the content iframe)
-      // Try to find sibling terminal iframe
+      // Try to find sibling terminal iframe in the parent showroom framework
       try {
         const parentDoc = window.parent.document
-        terminalFrame = parentDoc.querySelector('iframe[src*="/terminal"]') ||
+        terminalFrame = parentDoc.querySelector('iframe[src*="/wetty"]') ||
+                       parentDoc.querySelector('iframe[src*="/terminal"]') ||
+                       parentDoc.querySelector('iframe[src*="/tty"]') ||
+                       parentDoc.querySelector('.app-split-right__content.active iframe') ||
                        parentDoc.querySelector('iframe#terminal_01')
+
+        // If not found in active tab, search all tab iframes
+        if (!terminalFrame) {
+          const allIframes = parentDoc.querySelectorAll('.app-split-right__content iframe')
+          for (let i = 0; i < allIframes.length; i++) {
+            const src = allIframes[i].src || ''
+            if (src.includes('/wetty') || src.includes('/terminal') || src.includes('/tty')) {
+              terminalFrame = allIframes[i]
+              break
+            }
+          }
+        }
       } catch (e) {
         console.error('Cannot access parent document:', e)
       }
     }
 
     if (terminalFrame && terminalFrame.contentWindow) {
-      console.log('Showroom Execute: Terminal iframe found, sending command')
+      console.log('Showroom Execute: Terminal iframe found:', terminalFrame.src)
 
+      // Method 1: Try wetty's socket directly
       try {
-        const term = terminalFrame.contentWindow.term
+        const wettyWindow = terminalFrame.contentWindow
+        // Wetty exposes the terminal via the global socket or term object
+        const term = wettyWindow.term || wettyWindow.wetty_term
 
         if (term) {
           console.log('Showroom Execute: Terminal object found')
 
-          // Method 1: Try sendText if available (some terminals have this)
           if (typeof term.sendText === 'function') {
             console.log('Showroom Execute: Using term.sendText()')
             term.sendText(command + '\n', true)
           } else if (typeof term.paste === 'function') {
-            // Method 2: Paste the command, then simulate Enter key
             console.log('Showroom Execute: Using term.paste() + simulated Enter')
             term.paste(command)
-            // Wait a tiny bit for paste to complete, then send Enter
             setTimeout(function () {
-              // Send Enter key - xterm uses '\r' for carriage return
               if (typeof term.write === 'function') {
                 term.write('\r')
               }
-              // Also try sending to the underlying shell if available
               if (term._core && term._core.coreService && term._core.coreService.triggerDataEvent) {
                 term._core.coreService.triggerDataEvent('\r')
               }
             }, 10)
           } else if (typeof term.write === 'function') {
-            // Method 3: Write command and Enter together
             console.log('Showroom Execute: Using term.write() with newline')
             term.write(command + '\r')
           }
-
           console.log('Showroom Execute: Command sent to terminal')
         } else {
-          console.error('Showroom Execute: Terminal object not found in iframe')
+          console.log('Showroom Execute: No term object, trying wetty socket input')
+          // Wetty uses a WebSocket - try to find and use it
+          const socket = wettyWindow.socket || wettyWindow.ws
+          if (socket && typeof socket.send === 'function') {
+            console.log('Showroom Execute: Using wetty socket.send()')
+            socket.send(command + '\r')
+          } else {
+            console.log('Showroom Execute: No socket found, using postMessage')
+          }
         }
       } catch (e) {
-        console.error('Showroom Execute: Error sending to terminal:', e)
+        console.error('Showroom Execute: Error accessing terminal:', e)
       }
 
-      // Also try postMessage as fallback
+      // Also try postMessage as fallback (works cross-origin)
       try {
         terminalFrame.contentWindow.postMessage({
           type: 'execute',
@@ -214,6 +233,7 @@
       }
     } else {
       console.error('Showroom Execute: Terminal iframe not found')
+      console.error('Showroom Execute: Searched for iframes with /wetty, /terminal, /tty paths')
       console.error('Terminal not found. Please ensure the terminal tab is loaded.')
     }
   }
