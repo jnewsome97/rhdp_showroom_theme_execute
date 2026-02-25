@@ -122,7 +122,14 @@
     block.addEventListener('click', function (e) {
       e.preventDefault()
       console.log('Showroom Execute: Block clicked!')
-      executeCommand(command)
+
+      // Switch to Terminal tab before executing
+      switchToTerminalTab()
+
+      // Small delay to let the terminal tab activate, then execute
+      setTimeout(function () {
+        executeCommand(command)
+      }, 300)
 
       // Visual feedback
       contentDiv.style.background = '#d4edda'
@@ -139,6 +146,34 @@
     })
 
     console.log('Showroom Execute: Block made clickable successfully')
+  }
+
+  function switchToTerminalTab () {
+    if (window.parent !== window) {
+      try {
+        const parentDoc = window.parent.document
+
+        // Find the Terminal tab button and click it
+        const tabButtons = parentDoc.querySelectorAll('button, [role="tab"], .pf-v5-c-tabs__link, .pf-v6-c-tabs__link')
+        for (let i = 0; i < tabButtons.length; i++) {
+          const text = tabButtons[i].textContent.trim()
+          if (text === 'Terminal' || text === 'Bastion') {
+            console.log('Showroom Execute: Switching to Terminal tab')
+            tabButtons[i].click()
+            return
+          }
+        }
+
+        // Fallback: update URL parameter to switch tab
+        const parentUrl = new URL(window.parent.location.href)
+        parentUrl.searchParams.set('t', 'Terminal')
+        window.parent.history.replaceState(null, '', parentUrl.toString())
+
+        console.log('Showroom Execute: Tab switch attempted via URL')
+      } catch (e) {
+        console.log('Showroom Execute: Cannot switch tab:', e)
+      }
+    }
   }
 
   function executeCommand (command) {
