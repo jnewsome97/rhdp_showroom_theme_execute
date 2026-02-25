@@ -151,44 +151,20 @@
   function switchToTerminalTab () {
     if (window.parent !== window) {
       try {
-        var parentDoc = window.parent.document
+        // The showroom React app listens for popstate events to detect URL changes
+        // Update the URL t= parameter and dispatch popstate to trigger React re-render
+        var parentUrl = new URL(window.parent.location.href)
+        var currentTab = parentUrl.searchParams.get('t')
 
-        // Find the Terminal/Bastion tab button in PatternFly tabs and click it
-        var tabLinks = parentDoc.querySelectorAll('.pf-v6-c-tabs__link, .pf-v5-c-tabs__link, [role="tab"]')
-        var found = false
-        for (var i = 0; i < tabLinks.length; i++) {
-          var text = tabLinks[i].textContent.trim()
-          if (text === 'Terminal' || text === 'Bastion') {
-            console.log('Showroom Execute: Found Terminal tab, clicking')
-            tabLinks[i].click()
-            found = true
-            break
-          }
+        if (currentTab === 'Terminal' || currentTab === 'Bastion') {
+          console.log('Showroom Execute: Already on Terminal tab')
+          return
         }
 
-        // If PatternFly tab not found, try any button/span containing Terminal
-        if (!found) {
-          var allElements = parentDoc.querySelectorAll('button, span, a')
-          for (var j = 0; j < allElements.length; j++) {
-            var elText = allElements[j].textContent.trim()
-            if (elText === 'Terminal' || elText === 'Bastion') {
-              console.log('Showroom Execute: Found Terminal element, clicking')
-              allElements[j].click()
-              found = true
-              break
-            }
-          }
-        }
-
-        // Fallback: navigate parent to Terminal tab via URL
-        if (!found) {
-          var parentUrl = new URL(window.parent.location.href)
-          var currentPage = parentUrl.searchParams.get('p') || 'index'
-          parentUrl.searchParams.set('t', 'Terminal')
-          parentUrl.searchParams.set('p', currentPage)
-          window.parent.location.href = parentUrl.toString()
-          console.log('Showroom Execute: Tab switch via URL navigation')
-        }
+        parentUrl.searchParams.set('t', 'Terminal')
+        window.parent.history.pushState(null, '', parentUrl.toString())
+        window.parent.dispatchEvent(new window.parent.PopStateEvent('popstate'))
+        console.log('Showroom Execute: Switched to Terminal tab via popstate')
       } catch (e) {
         console.log('Showroom Execute: Cannot switch tab:', e)
       }
