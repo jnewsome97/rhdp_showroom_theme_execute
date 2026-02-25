@@ -224,41 +224,35 @@
           console.log('Showroom Execute: Found xterm textarea, simulating input')
           xtermTextarea.focus()
 
-          // Use the xterm's core input handler via the textarea
-          // Insert text and dispatch input event
-          const inputEvent = new InputEvent('input', {
-            data: command + '\r',
-            inputType: 'insertText',
-            isComposing: false,
-            bubbles: true,
-          })
-
-          // Also try the data property approach
-          const dataTransfer = new DataTransfer()
-          dataTransfer.setData('text/plain', command)
-
-          const pasteEvent = new ClipboardEvent('paste', {
-            clipboardData: dataTransfer,
-            bubbles: true,
-            cancelable: true,
-          })
-
-          xtermTextarea.dispatchEvent(pasteEvent)
-
-          // After paste, send Enter key
-          setTimeout(function () {
-            const enterEvent = new KeyboardEvent('keydown', {
-              key: 'Enter',
-              code: 'Enter',
-              keyCode: 13,
-              which: 13,
-              bubbles: true,
+          // Use clipboard API to paste into xterm textarea
+          if (wettyWindow.navigator && wettyWindow.navigator.clipboard) {
+            wettyWindow.navigator.clipboard.writeText(command).then(function () {
+              wettyDoc.execCommand('paste')
+              setTimeout(function () {
+                // Simulate Enter key
+                var evt = wettyDoc.createEvent('KeyboardEvent')
+                try {
+                  evt.initKeyboardEvent('keydown', true, true, wettyWindow, 'Enter', 0, '', false, '')
+                } catch (err) {
+                  // fallback - just set the value and trigger input
+                  xtermTextarea.value = command + '\r'
+                  xtermTextarea.dispatchEvent(new wettyWindow.Event('input', { bubbles: true }))
+                }
+                xtermTextarea.dispatchEvent(evt)
+              }, 50)
+            }).catch(function () {
+              // Clipboard API failed, try execCommand
+              xtermTextarea.value = command
+              wettyDoc.execCommand('insertText', false, command + '\r')
             })
-            xtermTextarea.dispatchEvent(enterEvent)
-          }, 50)
+          } else {
+            // No clipboard API, use execCommand
+            xtermTextarea.value = command
+            wettyDoc.execCommand('insertText', false, command + '\r')
+          }
 
           sent = true
-          console.log('Showroom Execute: Command sent via xterm textarea paste')
+          console.log('Showroom Execute: Command sent via xterm textarea')
         }
 
         // Method 2: Try to access xterm terminal object directly
