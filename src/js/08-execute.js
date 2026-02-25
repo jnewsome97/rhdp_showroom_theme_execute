@@ -151,25 +151,44 @@
   function switchToTerminalTab () {
     if (window.parent !== window) {
       try {
-        const parentDoc = window.parent.document
+        var parentDoc = window.parent.document
 
-        // Find the Terminal tab button and click it
-        const tabButtons = parentDoc.querySelectorAll('button, [role="tab"], .pf-v5-c-tabs__link, .pf-v6-c-tabs__link')
-        for (let i = 0; i < tabButtons.length; i++) {
-          const text = tabButtons[i].textContent.trim()
+        // Find the Terminal/Bastion tab button in PatternFly tabs and click it
+        var tabLinks = parentDoc.querySelectorAll('.pf-v6-c-tabs__link, .pf-v5-c-tabs__link, [role="tab"]')
+        var found = false
+        for (var i = 0; i < tabLinks.length; i++) {
+          var text = tabLinks[i].textContent.trim()
           if (text === 'Terminal' || text === 'Bastion') {
-            console.log('Showroom Execute: Switching to Terminal tab')
-            tabButtons[i].click()
-            return
+            console.log('Showroom Execute: Found Terminal tab, clicking')
+            tabLinks[i].click()
+            found = true
+            break
           }
         }
 
-        // Fallback: update URL parameter to switch tab
-        const parentUrl = new URL(window.parent.location.href)
-        parentUrl.searchParams.set('t', 'Terminal')
-        window.parent.history.replaceState(null, '', parentUrl.toString())
+        // If PatternFly tab not found, try any button/span containing Terminal
+        if (!found) {
+          var allElements = parentDoc.querySelectorAll('button, span, a')
+          for (var j = 0; j < allElements.length; j++) {
+            var elText = allElements[j].textContent.trim()
+            if (elText === 'Terminal' || elText === 'Bastion') {
+              console.log('Showroom Execute: Found Terminal element, clicking')
+              allElements[j].click()
+              found = true
+              break
+            }
+          }
+        }
 
-        console.log('Showroom Execute: Tab switch attempted via URL')
+        // Fallback: navigate parent to Terminal tab via URL
+        if (!found) {
+          var parentUrl = new URL(window.parent.location.href)
+          var currentPage = parentUrl.searchParams.get('p') || 'index'
+          parentUrl.searchParams.set('t', 'Terminal')
+          parentUrl.searchParams.set('p', currentPage)
+          window.parent.location.href = parentUrl.toString()
+          console.log('Showroom Execute: Tab switch via URL navigation')
+        }
       } catch (e) {
         console.log('Showroom Execute: Cannot switch tab:', e)
       }
