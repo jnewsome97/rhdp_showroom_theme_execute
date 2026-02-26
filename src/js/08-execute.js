@@ -1,10 +1,10 @@
 /**
  * Showroom Execute Functionality
  * Adds execute buttons to code blocks with role="execute"
- * Similar to Homeroom/Bookbag functionality
+ * Sends commands to wetty terminal via socket.emit("input")
  */
 
-(function () {
+;(function () {
   'use strict'
 
   // Wait for DOM to be ready
@@ -15,95 +15,50 @@
   }
 
   function init () {
-    console.log('Showroom Execute: Initializing...')
-    console.log('Showroom Execute: DOM ready state:', document.readyState)
-
     // Find all code blocks with execute class
     // Antora renders role="execute" as <div class="listingblock execute">
-    const executeBlocks = document.querySelectorAll('div.listingblock.execute')
+    var executeBlocks = document.querySelectorAll('div.listingblock.execute')
 
-    console.log(`Showroom Execute: Found ${executeBlocks.length} execute blocks`)
+    if (executeBlocks.length === 0) return
 
-    if (executeBlocks.length === 0) {
-      console.warn('Showroom Execute: No execute blocks found! Checking for alternative selectors...')
-      const allListingBlocks = document.querySelectorAll('div.listingblock')
-      console.log(`Showroom Execute: Total listingblock divs: ${allListingBlocks.length}`)
-      allListingBlocks.forEach(function (block, index) {
-        if (index < 5) {
-          console.log(`Showroom Execute: Block ${index} classes:`, block.className)
-        }
-      })
-    }
-
-    executeBlocks.forEach(function (block, index) {
-      console.log(`Showroom Execute: Processing block ${index}`)
+    executeBlocks.forEach(function (block) {
       addExecuteButton(block)
     })
   }
 
   function addExecuteButton (block) {
-    console.log('Showroom Execute: Making block clickable')
-
     // Find the code element - it's nested: div.content > pre > code
-    const codeElement = block.querySelector('code')
-    if (!codeElement) {
-      console.warn('Showroom Execute: No code element found in block')
-      return
-    }
+    var codeElement = block.querySelector('code')
+    if (!codeElement) return
 
-    const command = codeElement.textContent.trim()
-    console.log('Showroom Execute: Command:', command.substring(0, 50) + '...')
+    var command = codeElement.textContent.trim()
 
     // Get the content div
-    const contentDiv = block.querySelector('.content')
-    if (!contentDiv) {
-      console.warn('Showroom Execute: No content div found')
-      return
-    }
+    var contentDiv = block.querySelector('.content')
+    if (!contentDiv) return
 
-    // Hide any existing copy buttons
-    const copyButtons = block.querySelectorAll('.copy-button, button[title*="Copy"], .toolbar button')
-    copyButtons.forEach(function (btn) {
+    // Hide any existing copy buttons / toolbar
+    block.querySelectorAll('.copy-button, button[title*="Copy"], .toolbar button').forEach(function (btn) {
       btn.style.display = 'none'
     })
-
-    // Also hide toolbar if it exists
-    const toolbar = block.querySelector('.toolbar')
-    if (toolbar) {
-      toolbar.style.display = 'none'
-    }
+    var toolbar = block.querySelector('.toolbar')
+    if (toolbar) toolbar.style.display = 'none'
 
     // Style the entire block to be clickable with warm color
-    block.style.cssText = `
-      cursor: pointer;
-      transition: all 0.2s ease;
-      border-radius: 4px;
-      position: relative;
-    `
+    block.style.cssText =
+      'cursor: pointer; transition: all 0.2s ease; border-radius: 4px; position: relative;'
 
-    // Add warm peachy/coral background color
-    contentDiv.style.cssText = `
-      background: #ffe8dc;
-      border-left: 4px solid #ff9966;
-      transition: all 0.2s ease;
-      position: relative;
-    `
+    contentDiv.style.cssText =
+      'background: #ffe8dc; border-left: 4px solid #ff9966; transition: all 0.2s ease; position: relative;'
 
-    // Add click indicator icon in top-right
-    const indicator = document.createElement('div')
-    indicator.innerHTML = '▶'
-    indicator.style.cssText = `
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      color: #cc6633;
-      font-size: 14px;
-      opacity: 0.7;
-      pointer-events: none;
-    `
+    // Add play indicator icon in top-right
+    var indicator = document.createElement('div')
+    indicator.innerHTML = '&#9654;'
+    indicator.style.cssText =
+      'position: absolute; top: 8px; right: 8px; color: #cc6633; font-size: 14px; opacity: 0.7; pointer-events: none;'
     contentDiv.appendChild(indicator)
 
-    // Hover effect
+    // Hover effects
     block.addEventListener('mouseenter', function () {
       contentDiv.style.background = '#ffd4c0'
       contentDiv.style.borderLeftColor = '#ff7733'
@@ -121,122 +76,119 @@
     // Click handler
     block.addEventListener('click', function (e) {
       e.preventDefault()
-      console.log('Showroom Execute: Block clicked!')
-
-      // Switch to Terminal tab before executing
       switchToTerminalTab()
 
-      // Small delay to let the terminal tab activate, then execute
       setTimeout(function () {
         executeCommand(command)
       }, 300)
 
-      // Visual feedback
+      // Visual feedback - green flash
       contentDiv.style.background = '#d4edda'
       contentDiv.style.borderLeftColor = '#28a745'
-      indicator.innerHTML = '✓'
+      indicator.innerHTML = '&#10003;'
       indicator.style.color = '#28a745'
 
       setTimeout(function () {
         contentDiv.style.background = '#ffe8dc'
         contentDiv.style.borderLeftColor = '#ff9966'
-        indicator.innerHTML = '▶'
+        indicator.innerHTML = '&#9654;'
         indicator.style.color = '#cc6633'
       }, 1000)
     })
-
-    console.log('Showroom Execute: Block made clickable successfully')
   }
 
+  /**
+   * Switch the showroom UI to the Terminal tab if not already active.
+   * The showroom SPA uses PatternFly v6 tabs.
+   */
   function switchToTerminalTab () {
-    if (window.parent !== window) {
-      try {
-        var parentDoc = window.parent.document
-
-        // Find the PF6 tab button by its item-text content
-        var tabTexts = parentDoc.querySelectorAll('.pf-v6-c-tabs__item-text')
-        for (var i = 0; i < tabTexts.length; i++) {
-          var text = tabTexts[i].textContent.trim()
-          if (text === 'Terminal' || text === 'Bastion') {
-            // Click the parent link element, not the span
-            var tabLink = tabTexts[i].closest('.pf-v6-c-tabs__link') || tabTexts[i].parentElement
-            if (tabLink) {
-              console.log('Showroom Execute: Clicking Terminal tab button')
-              tabLink.click()
-              return
-            }
-          }
+    if (window.parent === window) return
+    try {
+      var tabTexts = window.parent.document.querySelectorAll('.pf-v6-c-tabs__item-text')
+      for (var i = 0; i < tabTexts.length; i++) {
+        var text = tabTexts[i].textContent.trim()
+        if (text === 'Terminal' || text === 'Bastion') {
+          var link = tabTexts[i].closest('.pf-v6-c-tabs__link') || tabTexts[i].parentElement
+          if (link) link.click()
+          return
         }
-        console.log('Showroom Execute: Terminal tab not found in PF6 tabs')
-      } catch (e) {
-        console.log('Showroom Execute: Cannot switch tab:', e)
       }
+    } catch (e) {
+      // cross-origin or other access error - ignore
     }
   }
 
+  /**
+   * Find the wetty terminal iframe in the parent showroom SPA and
+   * send a command to the shell via wetty_term.socket.emit("input").
+   *
+   * Wetty sets window.wetty_term on its iframe window. The Term class
+   * extends xterm Terminal and has a .socket property (socket.io client).
+   * Input is sent via socket.emit("input", data) which goes to the SSH session.
+   */
   function executeCommand (command) {
-    console.log('Showroom Execute: Running command:', command)
+    var terminalFrame = findTerminalIframe()
 
-    // Try to find the terminal iframe
-    let terminalFrame = null
-
-    if (window.parent !== window) {
-      try {
-        const parentDoc = window.parent.document
-        terminalFrame = parentDoc.querySelector('iframe[src*="/wetty"]') ||
-                       parentDoc.querySelector('iframe[src*="/terminal"]') ||
-                       parentDoc.querySelector('iframe[src*="/tty"]') ||
-                       parentDoc.querySelector('.app-split-right__content.active iframe') ||
-                       parentDoc.querySelector('iframe#terminal_01')
-
-        if (!terminalFrame) {
-          const allIframes = parentDoc.querySelectorAll('.app-split-right__content iframe')
-          for (let i = 0; i < allIframes.length; i++) {
-            const src = allIframes[i].src || ''
-            if (src.includes('/wetty') || src.includes('/terminal') || src.includes('/tty')) {
-              terminalFrame = allIframes[i]
-              break
-            }
-          }
-        }
-      } catch (e) {
-        console.error('Cannot access parent document:', e)
-      }
-    }
-
-    if (terminalFrame && terminalFrame.contentWindow) {
-      console.log('Showroom Execute: Terminal iframe found:', terminalFrame.src)
-
-      try {
-        var wettyDoc = terminalFrame.contentDocument || terminalFrame.contentWindow.document
-        var textarea = wettyDoc.querySelector('.xterm-helper-textarea')
-
-        if (textarea) {
-          console.log('Showroom Execute: Found xterm textarea, sending input')
-          textarea.focus()
-
-          // Write command to clipboard then trigger paste into xterm
-          navigator.clipboard.writeText(command + '\n').then(function () {
-            console.log('Showroom Execute: Clipboard written, triggering paste')
-            textarea.focus()
-            wettyDoc.execCommand('paste')
-          }).catch(function () {
-            console.log('Showroom Execute: Clipboard failed, trying direct paste event')
-            textarea.focus()
-            textarea.value = command + '\n'
-            textarea.select()
-            wettyDoc.execCommand('insertText', false, command + '\n')
-          })
-          console.log('Showroom Execute: Command sent via keyboard events')
-        } else {
-          console.error('Showroom Execute: xterm textarea not found')
-        }
-      } catch (e) {
-        console.error('Showroom Execute: Error accessing terminal:', e)
-      }
-    } else {
+    if (!terminalFrame || !terminalFrame.contentWindow) {
       console.error('Showroom Execute: Terminal iframe not found')
-      console.error('Terminal not found. Please ensure the terminal tab is loaded.')
+      return
     }
+
+    try {
+      var wettyTerm = terminalFrame.contentWindow.wetty_term
+
+      if (wettyTerm && wettyTerm.socket) {
+        // Send command + carriage return directly to the SSH session via socket
+        wettyTerm.socket.emit('input', command + '\r')
+        return
+      }
+
+      // Fallback: try using xterm's internal data event which triggers onData -> socket.emit
+      if (wettyTerm && wettyTerm._core) {
+        var core = wettyTerm._core
+        if (core.coreService && typeof core.coreService.triggerDataEvent === 'function') {
+          core.coreService.triggerDataEvent(command + '\r')
+          return
+        }
+      }
+
+      console.error('Showroom Execute: wetty_term or socket not found in terminal iframe')
+    } catch (e) {
+      console.error('Showroom Execute: Error sending command:', e)
+    }
+  }
+
+  /**
+   * Locate the wetty/terminal iframe inside the showroom SPA parent document.
+   */
+  function findTerminalIframe () {
+    if (window.parent === window) return null
+
+    try {
+      var parentDoc = window.parent.document
+
+      // Try direct selectors for known wetty/terminal iframe patterns
+      var frame = parentDoc.querySelector('iframe[src*="/wetty"]') ||
+                  parentDoc.querySelector('iframe[src*="/terminal"]') ||
+                  parentDoc.querySelector('iframe[src*="/tty"]')
+      if (frame) return frame
+
+      // Try the active right-panel content iframe
+      frame = parentDoc.querySelector('.app-split-right__content.active iframe')
+      if (frame) return frame
+
+      // Search all right-panel iframes for one pointing at wetty
+      var iframes = parentDoc.querySelectorAll('.app-split-right__content iframe')
+      for (var i = 0; i < iframes.length; i++) {
+        var src = iframes[i].src || ''
+        if (src.indexOf('/wetty') !== -1 || src.indexOf('/terminal') !== -1 || src.indexOf('/tty') !== -1) {
+          return iframes[i]
+        }
+      }
+    } catch (e) {
+      // cross-origin error
+    }
+
+    return null
   }
 })()
