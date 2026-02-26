@@ -215,17 +215,31 @@
           console.log('Showroom Execute: Found xterm textarea, sending input')
           textarea.focus()
 
-          var fullCommand = command + '\r'
-          for (var i = 0; i < fullCommand.length; i++) {
-            var ch = fullCommand[i]
-            textarea.dispatchEvent(new wettyDoc.defaultView.KeyboardEvent('keydown', {
-              key: ch,
-              keyCode: ch.charCodeAt(0),
-              which: ch.charCodeAt(0),
-              bubbles: true,
-              cancelable: true,
-            }))
-          }
+          // xterm processes text via the 'data' event on the textarea's input
+          // Use InputEvent to inject text directly
+          textarea.value = ''
+          textarea.dispatchEvent(new wettyDoc.defaultView.InputEvent('beforeinput', {
+            data: command,
+            inputType: 'insertText',
+            bubbles: true,
+            cancelable: true,
+          }))
+          textarea.value = command
+          textarea.dispatchEvent(new wettyDoc.defaultView.Event('input', {
+            bubbles: true,
+          }))
+          // Send Enter
+          textarea.value = ''
+          textarea.dispatchEvent(new wettyDoc.defaultView.InputEvent('beforeinput', {
+            data: '\r',
+            inputType: 'insertText',
+            bubbles: true,
+            cancelable: true,
+          }))
+          textarea.value = '\r'
+          textarea.dispatchEvent(new wettyDoc.defaultView.Event('input', {
+            bubbles: true,
+          }))
           console.log('Showroom Execute: Command sent via keyboard events')
         } else {
           console.error('Showroom Execute: xterm textarea not found')
