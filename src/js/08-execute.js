@@ -207,93 +207,45 @@
     if (terminalFrame && terminalFrame.contentWindow) {
       console.log('Showroom Execute: Terminal iframe found:', terminalFrame.src)
 
-      let sent = false
-
       try {
         var wettyDoc = terminalFrame.contentDocument || terminalFrame.contentWindow.document
-        var terminalDiv = wettyDoc.getElementById('terminal')
 
-        if (terminalDiv) {
-          // xterm stores its instance on the DOM element via ._core or xterm property
-          // Walk the element's properties to find the Terminal instance
-          var term = null
-          var keys = Object.keys(terminalDiv)
+        // Find xterm Terminal instance via the DOM
+        var term = null
+        var xtermEl = wettyDoc.querySelector('.xterm')
+        if (xtermEl) {
+          var keys = Object.keys(xtermEl)
           for (var k = 0; k < keys.length; k++) {
-            var val = terminalDiv[keys[k]]
-            if (val && typeof val === 'object' && typeof val.onData === 'function') {
+            var val = xtermEl[keys[k]]
+            if (val && typeof val === 'object' && val._core) {
               term = val
               break
             }
           }
+        }
 
-          // Also check xterm's internal properties
-          if (!term) {
-            var xtermEl = wettyDoc.querySelector('.xterm')
-            if (xtermEl) {
-              keys = Object.keys(xtermEl)
-              for (k = 0; k < keys.length; k++) {
-                val = xtermEl[keys[k]]
-                if (val && typeof val === 'object' && val._core) {
-                  term = val
-                  break
-                }
+        if (!term) {
+          var terminalDiv = wettyDoc.getElementById('terminal')
+          if (terminalDiv) {
+            keys = Object.keys(terminalDiv)
+            for (k = 0; k < keys.length; k++) {
+              val = terminalDiv[keys[k]]
+              if (val && typeof val === 'object' && typeof val.onData === 'function') {
+                term = val
+                break
               }
             }
           }
-
-          if (term && term._core) {
-            console.log('Showroom Execute: Found xterm instance via DOM')
-            // Use _core.coreService.triggerDataEvent to inject input
-            // This is the same path as keyboard input
-            term._core.coreService.triggerDataEvent(command + '\r', true)
-            sent = true
-            console.log('Showroom Execute: Command injected via triggerDataEvent')
-          } else if (term && typeof term.input === 'function') {
-            console.log('Showroom Execute: Using term.input()')
-            term.input(command + '\r', true)
-            sent = true
-          } else if (term && typeof term.paste === 'function') {
-            console.log('Showroom Execute: Using term.paste()')
-            term.paste(command + '\r')
-            sent = true
-          }
         }
 
-        // Fallback: find textarea and dispatch keyboard events character by character
-        if (!sent) {
-          var textarea = wettyDoc.querySelector('.xterm-helper-textarea')
-          if (textarea) {
-            console.log('Showroom Execute: Falling back to character-by-character input')
-            textarea.focus()
-            var fullCommand = command + '\r'
-            for (var i = 0; i < fullCommand.length; i++) {
-              var ch = fullCommand[i]
-              var kd = new wettyDoc.defaultView.KeyboardEvent('keydown', {
-                key: ch,
-                charCode: ch.charCodeAt(0),
-                keyCode: ch.charCodeAt(0),
-                which: ch.charCodeAt(0),
-                bubbles: true,
-              })
-              textarea.dispatchEvent(kd)
-              var kp = new wettyDoc.defaultView.KeyboardEvent('keypress', {
-                key: ch,
-                charCode: ch.charCodeAt(0),
-                keyCode: ch.charCodeAt(0),
-                which: ch.charCodeAt(0),
-                bubbles: true,
-              })
-              textarea.dispatchEvent(kp)
-            }
-            sent = true
-          }
+        if (term && term._core && term._core.coreService) {
+          console.log('Showroom Execute: Found xterm instance, using triggerDataEvent')
+          term._core.coreService.triggerDataEvent(command + '\r')
+        } else {
+          console.error('Showroom Execute: Could not find xterm instance on DOM')
         }
       } catch (e) {
         console.error('Showroom Execute: Error accessing terminal:', e)
-      }
-
-      if (!sent) {
-        console.error('Showroom Execute: All methods failed')
       }
     } else {
       console.error('Showroom Execute: Terminal iframe not found')
