@@ -209,40 +209,33 @@
 
       try {
         var wettyDoc = terminalFrame.contentDocument || terminalFrame.contentWindow.document
+        var textarea = wettyDoc.querySelector('.xterm-helper-textarea')
 
-        // Find xterm Terminal instance via the DOM
-        var term = null
-        var xtermEl = wettyDoc.querySelector('.xterm')
-        if (xtermEl) {
-          var keys = Object.keys(xtermEl)
-          for (var k = 0; k < keys.length; k++) {
-            var val = xtermEl[keys[k]]
-            if (val && typeof val === 'object' && val._core) {
-              term = val
-              break
-            }
+        if (textarea) {
+          console.log('Showroom Execute: Found xterm textarea, sending input')
+          textarea.focus()
+
+          var fullCommand = command + '\r'
+          for (var i = 0; i < fullCommand.length; i++) {
+            var ch = fullCommand[i]
+            textarea.dispatchEvent(new wettyDoc.defaultView.KeyboardEvent('keydown', {
+              key: ch,
+              charCode: ch.charCodeAt(0),
+              keyCode: ch.charCodeAt(0),
+              which: ch.charCodeAt(0),
+              bubbles: true,
+            }))
+            textarea.dispatchEvent(new wettyDoc.defaultView.KeyboardEvent('keypress', {
+              key: ch,
+              charCode: ch.charCodeAt(0),
+              keyCode: ch.charCodeAt(0),
+              which: ch.charCodeAt(0),
+              bubbles: true,
+            }))
           }
-        }
-
-        if (!term) {
-          var terminalDiv = wettyDoc.getElementById('terminal')
-          if (terminalDiv) {
-            keys = Object.keys(terminalDiv)
-            for (k = 0; k < keys.length; k++) {
-              val = terminalDiv[keys[k]]
-              if (val && typeof val === 'object' && typeof val.onData === 'function') {
-                term = val
-                break
-              }
-            }
-          }
-        }
-
-        if (term && term._core && term._core.coreService) {
-          console.log('Showroom Execute: Found xterm instance, using triggerDataEvent')
-          term._core.coreService.triggerDataEvent(command + '\r')
+          console.log('Showroom Execute: Command sent via keyboard events')
         } else {
-          console.error('Showroom Execute: Could not find xterm instance on DOM')
+          console.error('Showroom Execute: xterm textarea not found')
         }
       } catch (e) {
         console.error('Showroom Execute: Error accessing terminal:', e)
