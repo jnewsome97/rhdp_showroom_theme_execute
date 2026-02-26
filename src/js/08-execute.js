@@ -220,17 +220,10 @@
             var ch = fullCommand[i]
             textarea.dispatchEvent(new wettyDoc.defaultView.KeyboardEvent('keydown', {
               key: ch,
-              charCode: ch.charCodeAt(0),
               keyCode: ch.charCodeAt(0),
               which: ch.charCodeAt(0),
               bubbles: true,
-            }))
-            textarea.dispatchEvent(new wettyDoc.defaultView.KeyboardEvent('keypress', {
-              key: ch,
-              charCode: ch.charCodeAt(0),
-              keyCode: ch.charCodeAt(0),
-              which: ch.charCodeAt(0),
-              bubbles: true,
+              cancelable: true,
             }))
           }
           console.log('Showroom Execute: Command sent via keyboard events')
