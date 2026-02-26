@@ -215,31 +215,18 @@
           console.log('Showroom Execute: Found xterm textarea, sending input')
           textarea.focus()
 
-          // xterm processes text via the 'data' event on the textarea's input
-          // Use InputEvent to inject text directly
-          textarea.value = ''
-          textarea.dispatchEvent(new wettyDoc.defaultView.InputEvent('beforeinput', {
-            data: command,
-            inputType: 'insertText',
-            bubbles: true,
-            cancelable: true,
-          }))
-          textarea.value = command
-          textarea.dispatchEvent(new wettyDoc.defaultView.Event('input', {
-            bubbles: true,
-          }))
-          // Send Enter
-          textarea.value = ''
-          textarea.dispatchEvent(new wettyDoc.defaultView.InputEvent('beforeinput', {
-            data: '\r',
-            inputType: 'insertText',
-            bubbles: true,
-            cancelable: true,
-          }))
-          textarea.value = '\r'
-          textarea.dispatchEvent(new wettyDoc.defaultView.Event('input', {
-            bubbles: true,
-          }))
+          // Write command to clipboard then trigger paste into xterm
+          navigator.clipboard.writeText(command + '\n').then(function () {
+            console.log('Showroom Execute: Clipboard written, triggering paste')
+            textarea.focus()
+            wettyDoc.execCommand('paste')
+          }).catch(function () {
+            console.log('Showroom Execute: Clipboard failed, trying direct paste event')
+            textarea.focus()
+            textarea.value = command + '\n'
+            textarea.select()
+            wettyDoc.execCommand('insertText', false, command + '\n')
+          })
           console.log('Showroom Execute: Command sent via keyboard events')
         } else {
           console.error('Showroom Execute: xterm textarea not found')
