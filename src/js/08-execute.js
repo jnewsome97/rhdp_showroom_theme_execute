@@ -120,10 +120,9 @@
 
   /**
    * Find the wetty terminal iframe in the parent showroom SPA and
-   * send a command to the shell via wetty_term.socket.emit("input").
+   * send a command to the shell via socket.emit("input").
    *
-   * Wetty sets window.wetty_term on its iframe window. The Term class
-   * extends xterm Terminal and has a .socket property (socket.io client).
+   * Requires wetty.js to expose window.wetty_socket (the socket.io client).
    * Input is sent via socket.emit("input", data) which goes to the SSH session.
    */
   function executeCommand (command) {
@@ -135,24 +134,14 @@
     }
 
     try {
-      var wettyTerm = terminalFrame.contentWindow.wetty_term
+      var sock = terminalFrame.contentWindow.wetty_socket
 
-      if (wettyTerm && wettyTerm.socket) {
-        // Send command + carriage return directly to the SSH session via socket
-        wettyTerm.socket.emit('input', command + '\r')
+      if (sock) {
+        sock.emit('input', command + '\r')
         return
       }
 
-      // Fallback: try using xterm's internal data event which triggers onData -> socket.emit
-      if (wettyTerm && wettyTerm._core) {
-        var core = wettyTerm._core
-        if (core.coreService && typeof core.coreService.triggerDataEvent === 'function') {
-          core.coreService.triggerDataEvent(command + '\r')
-          return
-        }
-      }
-
-      console.error('Showroom Execute: wetty_term or socket not found in terminal iframe')
+      console.error('Showroom Execute: wetty_socket not found in terminal iframe')
     } catch (e) {
       console.error('Showroom Execute: Error sending command:', e)
     }
