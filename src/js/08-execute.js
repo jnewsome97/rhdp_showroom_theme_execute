@@ -1,7 +1,7 @@
 /**
  * Showroom Execute Functionality
  * Adds execute buttons to code blocks with role="execute"
- * Sends commands to wetty terminal via socket.emit("input")
+ * Sends commands to the wetty terminal in the showroom SPA.
  */
 
 ;(function () {
@@ -119,11 +119,11 @@
   }
 
   /**
-   * Find the wetty terminal iframe in the parent showroom SPA and
-   * send a command to the shell via socket.emit("input").
+   * Send a command to the wetty terminal.
    *
-   * Requires wetty.js to expose window.wetty_socket (the socket.io client).
-   * Input is sent via socket.emit("input", data) which goes to the SSH session.
+   * Preferred: use wetty_socket.emit("input") if wetty exposes it on window.
+   * Fallback: dispatch a ClipboardEvent paste to xterm's hidden textarea,
+   * which triggers onData -> socket.emit("input") without any wetty changes.
    */
   function executeCommand (command) {
     var terminalFrame = findTerminalIframe()
@@ -134,14 +134,42 @@
     }
 
     try {
+      // Preferred path: direct socket access (requires patched wetty)
       var sock = terminalFrame.contentWindow.wetty_socket
-
       if (sock) {
         sock.emit('input', command + '\r')
         return
       }
 
-      console.error('Showroom Execute: wetty_socket not found in terminal iframe')
+      // Fallback: paste into xterm's textarea (works with stock wetty)
+      var doc = terminalFrame.contentWindow.document
+      var textarea = doc.querySelector('.xterm-helper-textarea')
+      if (!textarea) {
+        console.error('Showroom Execute: xterm textarea not found')
+        return
+      }
+
+      textarea.focus()
+
+      // Paste the command text via ClipboardEvent
+      var dt = new DataTransfer() // eslint-disable-line no-undef
+      dt.setData('text/plain', command)
+      textarea.dispatchEvent(new ClipboardEvent('paste', { // eslint-disable-line no-undef
+        clipboardData: dt,
+        bubbles: true,
+        cancelable: true,
+      }))
+
+      // Send Enter separately so it works with bracketedPasteMode
+      setTimeout(function () {
+        textarea.dispatchEvent(new KeyboardEvent('keydown', { // eslint-disable-line no-undef
+          key: 'Enter',
+          code: 'Enter',
+          keyCode: 13,
+          which: 13,
+          bubbles: true,
+        }))
+      }, 50)
     } catch (e) {
       console.error('Showroom Execute: Error sending command:', e)
     }
